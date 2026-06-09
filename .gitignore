@@ -74,3 +74,45 @@ test/.test_coverage.dart
 *~
 *.swp
 *.swo
+
+# Flutter create 生成的临时（每次 flutter pub get 会更新）
+**/Flutter/flutter_export_environment.sh
+**/Flutter/Generated.xcconfig
+**/Flutter/Flutter.podspec
+**/flutter_export_environment.sh
+
+# Pub overrides（melos / dev 期临时文件）
+pubspec_overrides.yaml
+**/pubspec_overrides.yaml
+
+# Android 签名 / 本地配置
+**/android/keystore.properties
+**/android/key.properties
+**/android/local.properties
+**/android/.gradle/
+**/android/captures/
+**/android/app/release/
+**/*.jks
+**/*.keystore
+
+# iOS 签名（不进 git，本地 Keychain / fastlane 管理）
+**/ios/fastlane/report.xml
+**/ios/fastlane/Preview.html
+**/ios/fastlane/screenshots
+**/ios/fastlane/test_output
+**/ios/Runner.xcworkspace/xcuserdata/
+**/ios/Runner.xcodeproj/xcuserdata/
+**/ios/Runner.xcodeproj/project.xcworkspace/xcuserdata/
+
+# 本地 IDE 配置（团队共享配置应进 git，但 user-specific 不要）
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/usage.statistics.xml
+.idea/dictionaries
+.idea/shelf
+.vscode/launch.json   # 个人调试配置（团队共享的 .vscode/settings.json 可考虑进 git）
+
+# 临时文件 / 日志
+*.log
+**/.terminal.log
+

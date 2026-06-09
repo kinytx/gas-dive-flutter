@@ -1,0 +1,61 @@
+# 强制所有文本文件用 LF 换行（避免 Windows/Mac/Linux 双机协作 CRLF 冲突）
+* text=auto eol=lf
+
+# Windows 专属脚本保留 CRLF
+*.bat       eol=crlf
+*.cmd       eol=crlf
+*.ps1       eol=crlf
+
+# 文档 / 源代码（显式 LF，跨平台一致）
+*.dart      text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.md        text eol=lf
+*.json      text eol=lf
+*.xml       text eol=lf
+*.plist     text eol=lf
+*.gradle    text eol=lf
+*.kt        text eol=lf
+*.swift     text eol=lf
+*.h         text eol=lf
+*.m         text eol=lf
+
+# 二进制 — git 不要尝试 diff/merge
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.webp      binary
+*.svg       binary
+*.ico       binary
+*.icns      binary
+*.ttf       binary
+*.otf       binary
+*.woff      binary
+*.woff2     binary
+*.zip       binary
+*.gz        binary
+*.tar       binary
+*.jar       binary
+*.aar       binary
+*.so        binary
+*.dylib     binary
+*.dll       binary
+*.exe       binary
+*.framework binary
+*.xcassets  binary
+*.pdf       binary
+*.mp4       binary
+*.mov       binary
+*.wav       binary
+*.mp3       binary
+
+# Lock 文件 — 跨平台行尾敏感，统一 LF
+*.lock      text eol=lf
+pubspec.lock text eol=lf
+
+# linguist（GitHub 语言统计）忽略生成 / 第三方代码
+**/build/**         linguist-generated=true
+**/.dart_tool/**    linguist-generated=true
+**/Generated.xcconfig linguist-generated=true
+**/Pods/**          linguist-vendored=true

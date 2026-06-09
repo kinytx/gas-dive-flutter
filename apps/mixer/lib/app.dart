@@ -2,7 +2,7 @@
 
 import 'package:flutter/material.dart';
 
-import 'pages/home_page.dart';
+import 'pages/mix_calc_page.dart';
 import 'theme/mixer_theme.dart';
 
 class MixerApp extends StatefulWidget {
@@ -26,7 +26,7 @@ class _MixerAppState extends State<MixerApp> {
       title: 'Dive Gas Mixer',
       debugShowCheckedModeBanner: false,
       theme: MixerTheme.themeFor(_themeMode),
-      home: HomePage(
+      home: MixCalcPage(
         currentTheme: _themeMode,
         onThemeChanged: _setTheme,
       ),
