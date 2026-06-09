@@ -1,0 +1,14 @@
+name: dive_calc
+description: 潜水通用计算（MOD / END / EADD / NDL） — 翻译自 gas-dive-mixer/shared/utils/dive-calc.ts
+version: 0.1.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+
+dependencies:
+  meta: ^1.15.0
+
+dev_dependencies:
+  test: ^1.25.0
+  lints: ^4.0.0

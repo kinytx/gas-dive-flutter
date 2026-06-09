@@ -1,0 +1,4 @@
+# melos_managed_dependency_overrides: dive_calc
+dependency_overrides:
+  dive_calc:
+    path: ..\\..\\packages\\dive_calc

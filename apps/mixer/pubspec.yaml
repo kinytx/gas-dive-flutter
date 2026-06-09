@@ -1,0 +1,31 @@
+name: mixer
+description: 潜水气体填充 App（Flutter 版）
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+  flutter: '>=3.22.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # 共享算法（monorepo path 引用，未来可发到 pub.dev）
+  dive_calc:
+    path: ../../packages/dive_calc
+
+  # Material 风格图标
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  # assets:
+  #   - assets/images/      # 未来加资源时取消注释
+  # fonts:
+  #   - family: ...

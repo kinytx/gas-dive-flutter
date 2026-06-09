@@ -1,0 +1,46 @@
+name: gas_dive_flutter
+
+# Melos 管理 Flutter monorepo：一个命令对所有子包 pub get、test、analyze
+# 装好后用：melos bootstrap / melos run test / melos run analyze
+# 文档：https://melos.invertase.dev/
+
+packages:
+  - packages/*
+  - apps/*
+
+command:
+  bootstrap:
+    # bootstrap 时自动跑 pub get（等价于在每个子包跑 flutter pub get）
+    runPubGetInParallel: true
+    # 用本地 path 引用而非 pub.dev 拉包 —— packages/dive_calc 在 apps/mixer 里用 path: ../../packages/dive_calc
+    usePubspecOverrides: true
+
+  version:
+    # 版本号统一管理（暂未启用，等多包后开）
+    workspaceChangelog: false
+
+scripts:
+  # 跑所有包的单元测试
+  test:
+    run: melos exec -c 1 -- "dart test"
+    description: 跑所有包的 dart test
+
+  # 跑 Flutter 应用的 widget 测试（仅 apps/*）
+  test:flutter:
+    run: melos exec -c 1 --scope "*mixer*" --scope "*plan*" -- "flutter test"
+    description: 跑 Flutter App 的 widget test
+
+  # 静态分析
+  analyze:
+    run: melos exec -c 1 -- "dart analyze"
+    description: 所有包静态分析
+
+  # 格式化
+  format:
+    run: melos exec -c 1 -- "dart format ."
+    description: 所有包代码格式化
+
+  # 清理 build artifacts
+  clean:
+    run: melos exec -c 1 -- "flutter clean || dart pub cache repair"
+    description: 清 build/.dart_tool

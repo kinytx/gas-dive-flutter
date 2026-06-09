@@ -1,0 +1,11 @@
+# 顶层 pubspec —— 仅放 monorepo 工具依赖
+name: gas_dive_flutter_workspace
+description: gas-dive-flutter monorepo workspace 占位
+publish_to: 'none'
+version: 0.0.1
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+
+dev_dependencies:
+  melos: ^6.2.0

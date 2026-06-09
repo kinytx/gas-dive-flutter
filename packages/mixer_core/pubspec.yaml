@@ -1,0 +1,14 @@
+name: mixer_core
+description: 气体混合核心算法（理想气体 MVP）— 翻译自 gas-dive-mixer/shared/utils/mixer.ts
+version: 0.1.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+
+dependencies:
+  meta: ^1.15.0
+
+dev_dependencies:
+  test: ^1.25.0
+  lints: ^4.0.0

@@ -1,0 +1,6 @@
+include: package:lints/recommended.yaml
+
+linter:
+  rules:
+    # 允许 SCREAMING_SNAKE_CASE 常量保留（跨语言对照）—— 我们用 lowerCamel 加注释代替，不需要这一条
+    constant_identifier_names: true
