@@ -20,6 +20,12 @@ dependencies:
   # Material 风格图标
   cupertino_icons: ^1.0.8
 
+  # P3.1: 本地历史记录
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  uuid: ^4.5.1
+  path_provider: ^2.1.4
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

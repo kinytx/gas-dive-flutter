@@ -15,3 +15,7 @@ library mixer_core;
 
 export 'src/types.dart';
 export 'src/gas_mixer.dart';
+export 'src/atmosphere.dart';
+export 'src/eos.dart';
+export 'src/eos_constants.dart' show LKCoefficients, CriticalParams, HeVirial;
+export 'src/z_factor.dart';

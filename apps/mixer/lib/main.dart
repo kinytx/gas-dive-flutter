@@ -11,7 +11,10 @@
 import 'package:flutter/material.dart';
 
 import 'app.dart';
+import 'services/history_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await HistoryService.init(); // Hive 初始化 + 打开 history box
   runApp(const MixerApp());
 }
