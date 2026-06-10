@@ -87,6 +87,11 @@ class CalculateMixParams {
   /// 是否启用 Z 因子真实气体修正（V2b 实现，目前占位）
   final bool useRealGases;
 
+  /// O₂ 高残压安全警告开关（默认 false，opt-in）。
+  /// 仅当 fillOrder=o2-first 且 O₂ 填充步起点瓶压 > o2FillHighResidualBar 时，
+  /// warnings 里 push highResidualForO2Fill。对齐 mixer.ts o2HighResidualWarn。
+  final bool o2HighResidualWarn;
+
   const CalculateMixParams({
     required this.currentO2,
     required this.currentHe,
@@ -100,6 +105,7 @@ class CalculateMixParams {
     this.tempC = 20,
     this.pressureRef = PressureRef.fill,
     this.useRealGases = false,
+    this.o2HighResidualWarn = false,
   });
 }
 
@@ -160,6 +166,10 @@ enum MixErrorCode {
 enum MixWarning {
   /// 残压 < lowResidualBar，气体成分可能不准
   lowResidualPressure,
+
+  /// O₂ 填充步起点压力过高（仅 o2-first + opt-in 触发），绝热压缩 + 残留物自燃风险。
+  /// 对应 mixer.ts MIXER_ERROR_CODES.HIGH_RESIDUAL_FOR_O2 = 'HIGH_RESIDUAL_FOR_O2_FILL'
+  highResidualForO2Fill,
 }
 
 @immutable

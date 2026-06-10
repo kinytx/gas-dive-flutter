@@ -64,6 +64,10 @@ class GasMixerConfig {
   /// Plan D 线性系数：每米 +N% O₂
   final double altitudeLinearK;
 
+  /// O₂ 高残压警告阈值 (bar)：o2-first 时 O₂ 填充步起点瓶压超过此值才告警。
+  /// 对齐 mixer.ts O2_FILL_HIGH_RESIDUAL_BAR = 50。
+  final double o2FillHighResidualBar;
+
   const GasMixerConfig({
     this.lowResidualBar = 10,
     this.concentrationTolerance = 0.001,
@@ -76,11 +80,12 @@ class GasMixerConfig {
     this.standardTempC = 21,
     this.celsiusToKelvin = 273.15,
     this.planBKBase = 0.5,
-    this.planBKO2Penalty = 0.005,
+    this.planBKO2Penalty = 0.01,
     this.planBKO2Threshold = 21,
-    this.planBKHePenalty = 0.003,
-    this.planBKHeThreshold = 0,
-    this.altitudeLinearK = 0.0001,
+    this.planBKHePenalty = 0.001,
+    this.planBKHeThreshold = 30,
+    this.altitudeLinearK = 0.001,
+    this.o2FillHighResidualBar = 50,
   });
 }
 
@@ -212,12 +217,14 @@ class GasMixer {
     );
 
     // ─── 7. drain 判断 ───────────────────────────────
+    // drain LP 求解用「原始」目标 O₂/He 百分比（用户设定的配方），
+    // 而非海拔修正后的 adjusted 值 —— 对齐 mixer.ts calculateMix 的 _calcDrain 传参。
     final drain = _calcDrain(
       cur,
       tgt,
       params.currentO2,
-      altAdj.adjustedO2,
-      altAdj.adjustedHe,
+      params.targetO2,
+      params.targetHe,
       params.currentHe,
       fillGaugePressure,
       params.currentPressure,
@@ -245,14 +252,22 @@ class GasMixer {
     if (params.useRealGases) {
       zFactors = _zCalc.calculate(GetZFactorsParams(
         pressure: fillGaugePressure,
-        o2Frac: altAdj.adjustedO2 / 100,
-        heFrac: altAdj.adjustedHe / 100,
+        o2Frac: params.targetO2 / 100,
+        heFrac: params.targetHe / 100,
         tempC: params.tempC,
       ));
       // ÷ Z 约定：跟 mixer.ts 行为一致（见 mixer.ts §Z 方向调研注释）
       if (zFactors.oxygen > 0) oxygenToFill /= zFactors.oxygen;
       if (zFactors.helium > 0) heliumToFill /= zFactors.helium;
       if (zFactors.air > 0) airToFill /= zFactors.air;
+    }
+
+    // ─── 9b. O₂ 高残压警告（opt-in，仅 o2-first，对齐 mixer.ts） ─────
+    if (params.o2HighResidualWarn &&
+        params.fillOrder == FillOrder.o2First &&
+        oxygenToFill > 0 &&
+        startPressure > cfg.o2FillHighResidualBar) {
+      warnings.add(MixWarning.highResidualForO2Fill);
     }
 
     // ─── 10. fillSequence ────────────────────────────

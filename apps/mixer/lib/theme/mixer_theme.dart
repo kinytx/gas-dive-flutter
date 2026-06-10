@@ -1,9 +1,12 @@
-// 主题 token + ThemeData 工厂。
+// 主题工厂 —— 4 套主题 ThemeData，色板 1:1 对齐小程序（见 mixer_colors.dart）。
 //
-// 复刻 mixer 微信小程序的 4 套主题：dark / light / macaron / candy
-// 当前阶段仅占位，色值与小程序基本对齐；未来按 mixer 的 CSS 变量精修。
+// 改动（vs 旧占位版）：不再用随手挑的 seedColor，而是用 MixerColors 的真实
+// 小程序色值构建 ColorScheme，并把完整语义色板挂到 MixerColors ThemeExtension，
+// 供组件读取 He/安全红/四级文字/tint 等 ColorScheme 放不下的 token。
 
 import 'package:flutter/material.dart';
+
+import 'mixer_colors.dart';
 
 enum MixerThemeMode {
   /// 深海（夜晚潜水站）
@@ -23,77 +26,54 @@ class MixerTheme {
   MixerTheme._();
 
   /// 中文名（供 UI 显示）
-  static String nameOf(MixerThemeMode mode) {
-    switch (mode) {
-      case MixerThemeMode.dark:
-        return '深海';
-      case MixerThemeMode.light:
-        return '晴朗';
-      case MixerThemeMode.macaron:
-        return '马卡龙';
-      case MixerThemeMode.candy:
-        return '糖果';
-    }
-  }
+  static String nameOf(MixerThemeMode mode) => switch (mode) {
+        MixerThemeMode.dark => '深海',
+        MixerThemeMode.light => '晴朗',
+        MixerThemeMode.macaron => '马卡龙',
+        MixerThemeMode.candy => '糖果',
+      };
+
+  /// 该主题的语义色板。
+  static MixerColors colorsFor(MixerThemeMode mode) => switch (mode) {
+        MixerThemeMode.dark => MixerColors.dark,
+        MixerThemeMode.light => MixerColors.light,
+        MixerThemeMode.macaron => MixerColors.macaron,
+        MixerThemeMode.candy => MixerColors.candy,
+      };
 
   static ThemeData themeFor(MixerThemeMode mode) {
-    switch (mode) {
-      case MixerThemeMode.dark:
-        return _dark();
-      case MixerThemeMode.light:
-        return _light();
-      case MixerThemeMode.macaron:
-        return _macaron();
-      case MixerThemeMode.candy:
-        return _candy();
-    }
+    final c = colorsFor(mode);
+    final brightness =
+        mode == MixerThemeMode.dark ? Brightness.dark : Brightness.light;
+
+    // 以小程序主色作 seed 生成完整 Material 色阶，再覆盖关键语义色对齐小程序。
+    final scheme = ColorScheme.fromSeed(
+      seedColor: c.accentCyan,
+      brightness: brightness,
+    ).copyWith(
+      primary: c.accentCyan,
+      onPrimary: c.textOnAccent,
+      secondary: c.accentTeal,
+      onSecondary: c.textOnAccent,
+      error: c.accentWarn,
+      surface: c.bgCard,
+      onSurface: c.textPrimary,
+      outline: c.border,
+    );
+
+    return ThemeData(
+      useMaterial3: true,
+      brightness: brightness,
+      colorScheme: scheme,
+      scaffoldBackgroundColor: c.bgDeep,
+      cardColor: c.bgCard,
+      appBarTheme: AppBarTheme(
+        backgroundColor: c.bgDeep,
+        foregroundColor: c.textPrimary,
+        elevation: 0,
+      ),
+      // 完整语义色板挂这里；组件用 context.mixerColors 读取。
+      extensions: <ThemeExtension<dynamic>>[c],
+    );
   }
-
-  static ThemeData _dark() => ThemeData(
-        brightness: Brightness.dark,
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1976D2),
-          brightness: Brightness.dark,
-        ),
-        scaffoldBackgroundColor: const Color(0xFF0A1929),
-        cardColor: const Color(0xFF132F4C),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF0A1929),
-          elevation: 0,
-        ),
-      );
-
-  static ThemeData _light() => ThemeData(
-        brightness: Brightness.light,
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF2196F3),
-          brightness: Brightness.light,
-        ),
-        scaffoldBackgroundColor: const Color(0xFFF5F7FA),
-        cardColor: Colors.white,
-      );
-
-  static ThemeData _macaron() => ThemeData(
-        brightness: Brightness.light,
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFE91E63),
-          brightness: Brightness.light,
-        ),
-        scaffoldBackgroundColor: const Color(0xFFFFF1F5),
-        cardColor: const Color(0xFFFFE6EE),
-      );
-
-  static ThemeData _candy() => ThemeData(
-        brightness: Brightness.light,
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFFF9800),
-          brightness: Brightness.light,
-        ),
-        scaffoldBackgroundColor: const Color(0xFFFFF8E1),
-        cardColor: const Color(0xFFFFECB3),
-      );
 }

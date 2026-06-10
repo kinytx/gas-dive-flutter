@@ -12,11 +12,17 @@ import 'package:flutter/material.dart';
 import 'package:mixer_core/mixer_core.dart';
 
 import '../models/history_entry.dart';
+import '../models/weather_info.dart';
 import '../services/history_service.dart';
+import '../theme/breakpoints.dart';
+import '../theme/design_tokens.dart';
+import '../theme/mixer_colors.dart';
 import '../theme/mixer_theme.dart';
 import '../widgets/gas_preset_chips.dart';
+import '../widgets/hero_weather.dart';
 import '../widgets/number_field.dart';
 import '../widgets/picker_field.dart';
+import 'account_page.dart';
 import 'history_page.dart';
 import 'home_page.dart';
 
@@ -50,6 +56,9 @@ class _MixCalcPageState extends State<MixCalcPage> {
   PressureRef _pressureRef = PressureRef.fill;
   bool _advancedExpanded = false;
   bool _useRealGases = false;
+
+  /// 用户是否手动改过温度（true 后天气更新不再覆盖）
+  bool _userEditedTemp = false;
 
   final GasMixer _mixer = GasMixer();
 
@@ -150,6 +159,13 @@ class _MixCalcPageState extends State<MixCalcPage> {
         title: const Text('混气计算'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.account_circle_outlined),
+            tooltip: '账号',
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => const AccountPage(),
+            )),
+          ),
+          IconButton(
             icon: const Icon(Icons.history),
             tooltip: '历史记录',
             onPressed: () => _openHistory(),
@@ -186,25 +202,24 @@ class _MixCalcPageState extends State<MixCalcPage> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _currentGasCard(),
-            const SizedBox(height: 10),
-            _targetGasCard(),
-            const SizedBox(height: 10),
-            _advancedCard(),
-            const SizedBox(height: 10),
-            _fillOrderCard(),
-            const SizedBox(height: 14),
-            _resultArea(result),
-            const SizedBox(height: 20),
-          ],
-        ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final ws = windowSizeFor(
+              constraints.maxWidth, MediaQuery.orientationOf(context));
+          return switch (ws) {
+            WindowSize.phone => _buildPhone(result),
+            WindowSize.padPortrait => _buildPadPortrait(result),
+            WindowSize.padLandscape => _buildPadLandscape(result),
+          };
+        },
       ),
     );
+  }
+
+  /// 天气加载完成，自动同步温度（用户未手动改过时）
+  void _onWeatherLoaded(WeatherInfo info) {
+    if (_userEditedTemp || !mounted) return;
+    setState(() => _tempC = info.current.tempC.roundToDouble());
   }
 
   // ════════════════════════════════════════════════════════════
@@ -332,7 +347,10 @@ class _MixCalcPageState extends State<MixCalcPage> {
                 Expanded(child: NumberField(
                   label: '温度', suffix: '°C', icon: Icons.thermostat,
                   value: _tempC, min: -20, max: 50,
-                  onChanged: (v) => setState(() => _tempC = v),
+                  onChanged: (v) => setState(() {
+                    _tempC = v;
+                    _userEditedTemp = true; // 用户手动改后不再被天气覆盖
+                  }),
                 )),
               ]),
               const SizedBox(height: 10),
@@ -475,6 +493,125 @@ class _MixCalcPageState extends State<MixCalcPage> {
   }
 
   // ════════════════════════════════════════════════════════════
+  // 响应式布局（三档：phone / padPortrait / padLandscape）
+  // ════════════════════════════════════════════════════════════
+
+  /// 输入卡片序列（三档复用）
+  List<Widget> _inputCards() => [
+        _currentGasCard(),
+        const SizedBox(height: Dimens.cardGap),
+        _targetGasCard(),
+        const SizedBox(height: Dimens.cardGap),
+        _advancedCard(),
+        const SizedBox(height: Dimens.cardGap),
+        _fillOrderCard(),
+      ];
+
+  /// 手机：单列纵向滚动（Hero 横跨 + 输入 + 结果）
+  Widget _buildPhone(MixResult result) => SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            HeroWeather(onLoaded: _onWeatherLoaded),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  Dimens.pagePadding, 10, Dimens.pagePadding, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ..._inputCards(),
+                  const SizedBox(height: 14),
+                  _resultArea(result),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+
+  /// pad 竖屏：输入卡双列网格 + 结果全宽
+  Widget _buildPadPortrait(MixResult result) => SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            HeroWeather(onLoaded: _onWeatherLoaded),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  Dimens.pagePadding, 10, Dimens.pagePadding, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _currentGasCard(),
+                            const SizedBox(height: Dimens.cardGap),
+                            _advancedCard(),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: Dimens.splitGap),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _targetGasCard(),
+                            const SizedBox(height: Dimens.cardGap),
+                            _fillOrderCard(),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  _resultArea(result),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+
+  /// pad 横屏 / 桌面：左输入滚动 | 右结果常驻滚动
+  Widget _buildPadLandscape(MixResult result) => Column(
+        children: [
+          HeroWeather(onLoaded: _onWeatherLoaded),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  flex: Breakpoints.landscapeInputFlex,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(
+                        Dimens.pagePadding, 10, Dimens.cardGap, 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: _inputCards(),
+                    ),
+                  ),
+                ),
+                Container(
+                    width: Dimens.borderWidth, color: context.mixerColors.border),
+                Expanded(
+                  flex: Breakpoints.landscapeResultFlex,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(
+                        Dimens.cardGap, 10, Dimens.pagePadding, 20),
+                    child: _resultArea(result),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+
+  // ════════════════════════════════════════════════════════════
   // 历史记录交互
   // ════════════════════════════════════════════════════════════
 
@@ -615,6 +752,8 @@ class _MixCalcPageState extends State<MixCalcPage> {
     switch (w) {
       case MixWarning.lowResidualPressure:
         return '残压 < 10 bar，气体成分可能不准确';
+      case MixWarning.highResidualForO2Fill:                       // ← 加这两行
+        return 'O₂ 填充起点瓶压偏高，建议先放气（绝热压缩自燃风险）';
     }
   }
 
