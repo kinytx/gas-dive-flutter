@@ -1,353 +1,564 @@
-# API: 账号系统
+# API: 账号与鉴权
 
-> 后端待实现。mixer App 当前默认走 MockAuthProvider，所有登录/注册操作本地伪造。
-> 后端按本文档实现 endpoints 后，Flutter 端在 `main.dart` 切换：
+> 状态：后端已在 ECS 落地。本文按 `gas-dive-server` 当前实现整理，供 Flutter 端接入。
 >
-> ```dart
-> AuthService.setProvider(EcsAuthProvider(baseUrl: 'https://api.diveplan.cn'));
-> ```
+> Base URL：`https://api.diveplan.cn`
 >
-> Flutter 端 service 框架：`apps/mixer/lib/services/auth_service.dart`。
-> 数据模型：`apps/mixer/lib/models/auth_user.dart`。
+> Flutter 端服务建议仍放在 `apps/mixer/lib/services/auth_service.dart`，数据模型仍可放在 `apps/mixer/lib/models/auth_user.dart`。
 
 ---
 
-## 设计原则
+## 当前后端模型
 
-1. **每个设备开 App 就有账号**：首次启动自动调 `/anonymous` 注册匿名账号，本地存 CDID + JWT。**用户无感知**。
-2. **匿名 → 实名"无缝升级"**：用户后期注册邮箱时把 CDID 带上，后端把匿名账号"实名化"——历史/设置全部继承，userId 不变。
-3. **一个 user 多种登录方式**：同一个邮箱、Google、Apple 都可以绑同一 user，登录任一方式都进同一账号。
-4. **匿名账号也算正式账号**：客服可以按 CDID 查所有数据；errors / history 都关联到 userId。
+后端用户主键是 `Guid`，不是旧文档里的自增 `BIGSERIAL`。
+
+核心表：
+
+- `users`：一个真人账号一行。
+- `user_identities`：一个账号可绑定多种登录方式。
+- `email_verification_tokens`：邮箱验证码。
+- `user_action_tokens`：高风险操作的临时授权 token。
+
+当前 provider：
+
+| provider | 用途 |
+|---|---|
+| `email` | 邮箱 + 密码 |
+| `wechat_openid` | 微信小程序登录，区分 `app=dive/gas` |
+| `wechat_unionid` | 微信开放平台 unionid |
+| `wechat_web_openid` | Web 微信 OAuth 无 unionid 时兜底 |
+| `google` | Web Google OAuth |
+| `facebook` | Web Facebook OAuth |
+
+暂未实现旧文档中的：
+
+- `POST /api/auth/email/register`
+- `POST /api/auth/email/login`
+- `POST /api/auth/google/login` 直接上传 `idToken`
+- `POST /api/auth/apple/login`
+- `POST /api/auth/refresh`
+- `POST /api/auth/logout`
 
 ---
 
-## 数据模型
+## 鉴权方式
 
-### users 表
+普通接口使用 Bearer JWT：
 
-```sql
-CREATE TABLE users (
-  id BIGSERIAL PRIMARY KEY,
-  user_id VARCHAR(64) UNIQUE NOT NULL,    -- 'anon_xxx' / 'usr_xxx' 前端展示用
-  cdid VARCHAR(64) UNIQUE,                -- 设备匿名 ID（同设备稳定）
-  email VARCHAR(255) UNIQUE,              -- 绑邮箱后填
-  display_name VARCHAR(64),
-  avatar_url TEXT,
-  password_hash VARCHAR(255),             -- bcrypt，仅邮箱注册有
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
-CREATE INDEX idx_users_cdid ON users(cdid);
-CREATE INDEX idx_users_email ON users(email);
+```http
+Authorization: Bearer <jwt>
 ```
 
-### user_auth_methods 表
+服务端 `AuthMiddleware` 解析顺序：
 
-一个 user 可以绑多个第三方登录方式：
+1. `x-wx-openid` / `x-wx-appid`，兼容微信云托管注入。
+2. `Authorization: Bearer <jwt>`。
+3. `X-Api-Key: dpk_...`。
+4. 都没有则匿名继续，带 `[RequireUser]` 的接口返回 `401`。
 
-```sql
-CREATE TABLE user_auth_methods (
-  id BIGSERIAL PRIMARY KEY,
-  user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
-  method VARCHAR(16) NOT NULL,            -- 'anonymous' / 'email' / 'google' / 'apple'
-  provider_user_id VARCHAR(255),          -- Google sub / Apple sub / null (for email/anon)
-  email VARCHAR(255),                     -- 三方账号关联的邮箱（仅展示）
-  linked_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(method, provider_user_id)
-);
-CREATE INDEX idx_uam_user_id ON user_auth_methods(user_id);
+WebSocket 也支持：
+
+```text
+wss://api.diveplan.cn/ws/dc-bridge?access_token=<jwt>
 ```
 
-### JWT payload
+如果服务端开启 `AUTH_SESSION_TOKEN_REQUIRED=true`，部分写接口会额外要求临时 token：
+
+```http
+X-DivePlan-Session-Token: <sessionToken>
+```
+
+收到 `403 { "error": "session_token_required" }` 时，Flutter 端需要先调用 `/api/me/action-tokens` 获取临时 token，再重试原请求。
+
+## 无感匿名账号流程
+
+Flutter 首次启动时生成稳定 CDID，保存到安全存储，然后调用匿名登录接口。这个账号是正式 `users` 记录，历史混气、草稿、装备 OCR、潜水日志暂存都可以先挂在这个 userId 下。
+
+### 匿名登录 / 恢复
+
+`POST /api/auth/anonymous`
 
 ```json
 {
-  "sub": "usr_xxx",     // user_id（前端展示用）
-  "uid": 12345,         // users.id（数据库主键）
-  "cdid": "cdid-xxx",   // 仍持有设备匿名 ID（客服查问题用）
-  "iat": 1717000000,
-  "exp": 1719592000     // 30 天
+  "cdid": "flutter-device-uuid-or-install-id",
+  "sourceApp": "gas-flutter"
 }
 ```
-
----
-
-## Endpoints
-
-### `POST /api/auth/anonymous`
-
-匿名注册或恢复。**首次开 App 必调**。
-
-请求：
-
-```json
-{ "cdid": "cdid-abc-123" }
-```
-
-逻辑：
-- 如果 `cdid` 已存在 users 表 → 返回该 user
-- 否则新建 user_id=`anon_xxx`，cdid=入参，linked_methods=`{anonymous}`
 
 响应：
 
 ```json
 {
-  "ok": true,
-  "data": {
-    "user": { ... },
-    "jwt": "eyJ..."
-  }
+  "token": "eyJ...",
+  "userId": "4b8e4b8c-..."
 }
 ```
 
----
+后端逻辑：
 
-### `POST /api/auth/email/register`
+1. 用 `cdid` 查 `user_identities(provider='anonymous_device')`。
+2. 命中则复用原 userId，并刷新 `last_login_at`。
+3. 未命中则创建 `users` + `anonymous_device` identity。
+4. 返回 JWT。
 
-Email + 密码注册。如果当前已是匿名用户（headers 带 JWT），自动升级。
+Flutter 端要求：
 
-请求：
+- CDID 首次生成后必须稳定保存，不要每次启动重建。
+- 推荐使用 `flutter_secure_storage`。
+- 如果用户卸载 App，CDID 可能丢失；这类情况后续可以通过邮箱/微信登录找回正式账号。
+
+### 匿名升级为邮箱账号
+
+用户在匿名态注册邮箱时，请带当前匿名 JWT：
+
+```http
+Authorization: Bearer <anonymous jwt>
+```
+
+然后调用：
+
+`POST /api/auth/register`
 
 ```json
 {
   "email": "you@example.com",
   "password": "min8chars",
-  "displayName": "可选昵称"
+  "code": "123456"
 }
 ```
 
-Header（可选）：
+如果当前 JWT 对应账号只有 `anonymous_device` identity，后端会在同一个 userId 上新增 `email` identity。也就是说：
 
-```
-Authorization: Bearer <匿名 JWT>
-```
+- userId 不变
+- 历史数据不迁移，天然保留
+- 匿名 identity 继续保留，可用于同设备恢复
 
-逻辑：
-- 如果 email 已注册 → 400 `EMAIL_EXISTS`
-- 如果 header 带匿名 JWT：
-  - **升级匿名账号**：更新该 user 的 email/password_hash/display_name
-  - linked_methods 加 'email'，**保留 'anonymous'**（历史关联仍有效）
-- 否则新建 user（无 cdid）
-- 返回 user + 新 JWT
+如果当前 JWT 已经是邮箱/微信等正式账号，则注册会创建新账号或返回邮箱冲突，具体按邮箱是否已注册判断。
 
 ---
 
-### `POST /api/auth/email/login`
+## 邮箱登录流程
 
-请求：
+### 发送验证码
 
-```json
-{ "email": "...", "password": "..." }
-```
-
-逻辑：
-- 验密码 → 返回 user + JWT
-- 失败：400 `INVALID_CREDENTIALS`
-
----
-
-### `POST /api/auth/google/login`
-
-请求：
-
-```json
-{ "idToken": "eyJ...Google id_token..." }
-```
-
-逻辑：
-1. 验 idToken 签名（用 Google JWKS）
-2. 解出 `sub`（Google user id）+ `email`
-3. 查 user_auth_methods (method='google', provider_user_id=sub)：
-   - 命中 → 返回对应 user + JWT
-   - 没命中：
-     - 如果 header 带 JWT → 绑到当前 user
-     - 否则按 email 查 users：命中就绑、没命中就新建
-4. 返回 user + JWT
-
----
-
-### `POST /api/auth/apple/login`
-
-请求：
+`POST /api/auth/send-code`
 
 ```json
 {
-  "identityToken": "eyJ...",
-  "authorizationCode": "...",
-  "nonce": "可选"
+  "email": "you@example.com",
+  "purpose": "register"
 }
 ```
 
-逻辑同 Google，验 Apple JWT 签名（用 Apple JWKS）。
+`purpose` 支持：
 
-⚠️ Apple 的 `email` 可能是 `xxx@privaterelay.appleid.com`（私有中继），后续邮件要发给该地址才能转发。
-
----
-
-### `POST /api/auth/bind`
-
-绑定额外登录方式到当前账号（需要登录态）。
-
-Header：
-
-```
-Authorization: Bearer <JWT>
-```
-
-请求（绑邮箱）：
-
-```json
-{
-  "method": "email",
-  "email": "...",
-  "password": "..."
-}
-```
-
-请求（绑 Google）：
-
-```json
-{
-  "method": "google",
-  "idToken": "..."
-}
-```
-
-逻辑：
-- 把 method/provider 加到 user_auth_methods
-- 如果该 method 已被其它 user 占用 → 400 `ALREADY_LINKED_TO_ANOTHER`
-
----
-
-### `GET /api/auth/me`
-
-拉自己信息。
-
-Header：`Authorization: Bearer <JWT>`
+- `register`
+- `reset_password`
+- `change_email`
 
 响应：
 
 ```json
 {
-  "ok": true,
-  "data": {
-    "user": {
-      "userId": "usr_xxx",
-      "cdid": "cdid-xxx",
-      "email": "you@example.com",
-      "displayName": "...",
-      "avatarUrl": "...",
-      "linkedMethods": ["anonymous", "email"],
-      "createdAt": "2026-06-01T12:00:00Z"
+  "expiresInSec": 600
+}
+```
+
+常见错误：
+
+- `400 invalid_purpose`
+- `429 too_frequent`
+
+### 注册
+
+`POST /api/auth/register`
+
+```json
+{
+  "email": "you@example.com",
+  "password": "min8chars",
+  "code": "123456"
+}
+```
+
+响应：
+
+```json
+{
+  "token": "eyJ...",
+  "userId": "4b8e4b8c-..."
+}
+```
+
+常见错误：
+
+- `400 invalid_or_expired_code`
+- `409 email_already_registered`
+
+### 登录
+
+`POST /api/auth/login`
+
+```json
+{
+  "email": "you@example.com",
+  "password": "min8chars"
+}
+```
+
+响应同注册：
+
+```json
+{
+  "token": "eyJ...",
+  "userId": "4b8e4b8c-..."
+}
+```
+
+错误：
+
+- `401 invalid_credentials`
+
+### 重置密码
+
+先 `send-code`，`purpose=reset_password`。
+
+`POST /api/auth/reset-password`
+
+```json
+{
+  "email": "you@example.com",
+  "code": "123456",
+  "newPassword": "new-min8chars"
+}
+```
+
+成功响应为空 body 或 `{}`，以 HTTP 2xx 为准。
+
+---
+
+## 微信登录
+
+### 微信小程序
+
+`POST /api/auth/wechat/login`
+
+```json
+{
+  "app": "gas",
+  "code": "wx.login 返回的 code"
+}
+```
+
+`app` 可选：
+
+- `gas`
+- `dive`
+
+响应：
+
+```json
+{
+  "token": "eyJ...",
+  "userId": "4b8e4b8c-..."
+}
+```
+
+Flutter App 如果不是微信小程序环境，不能直接使用 `wx.login()`，需要后续接微信开放平台原生 SDK 后再单独补移动端 OAuth 流程。
+
+### Web 微信 OAuth
+
+`POST /api/auth/wechat/web-login`
+
+```json
+{
+  "code": "微信 Web OAuth code"
+}
+```
+
+这是 Web 授权回调后使用的接口，不是 Flutter 原生 SDK 的完整流程。
+
+---
+
+## Web OAuth
+
+当前 Google / Facebook 是浏览器跳转 OAuth，不是移动端直接提交 token。
+
+### Google
+
+```http
+GET /api/auth/oauth/google/start?returnUrl=https://www.diveplan.cn/account
+```
+
+后端完成 OAuth callback 后，会重定向到 `returnUrl`，并在 hash 中附带：
+
+```text
+#oauthToken=<jwt>&userId=<guid>
+```
+
+### Facebook
+
+```http
+GET /api/auth/oauth/facebook/start?returnUrl=https://www.diveplan.cn/account
+```
+
+返回方式同 Google。
+
+Flutter 原生 Google / Apple 登录要另开接口时，建议后端新增：
+
+- `POST /api/auth/google/login`，body: `{ "idToken": "..." }`
+- `POST /api/auth/apple/login`，body: `{ "identityToken": "...", "authorizationCode": "...", "nonce": "..." }`
+
+---
+
+## 当前用户接口
+
+### 拉取自己
+
+`GET /api/me`
+
+Header：
+
+```http
+Authorization: Bearer <jwt>
+```
+
+响应：
+
+```json
+{
+  "id": "4b8e4b8c-...",
+  "displayName": "昵称",
+  "isAdmin": false,
+  "isSuperAdmin": false,
+  "createdAt": "2026-06-01T12:00:00Z",
+  "identities": [
+    {
+      "id": "91d2...",
+      "provider": "email",
+      "providerUid": "you@example.com",
+      "isVerified": true,
+      "lastLoginAt": "2026-06-11T09:00:00Z"
     }
+  ]
+}
+```
+
+### 已绑定登录方式
+
+`GET /api/me/identities`
+
+响应是 `IdentitySummary[]`。
+
+### 解绑登录方式
+
+`DELETE /api/me/identities/{id}`
+
+不允许解绑最后一种登录方式。
+
+错误：
+
+- `404 identity_not_found`
+- `400 cannot_unbind_last_identity`
+
+### 改密码
+
+`PUT /api/me/password`
+
+```json
+{
+  "oldPassword": "old",
+  "newPassword": "new-min8chars"
+}
+```
+
+### 改邮箱
+
+先 `POST /api/auth/send-code`，`purpose=change_email`，发到新邮箱。
+
+`PUT /api/me/email`
+
+```json
+{
+  "newEmail": "new@example.com",
+  "code": "123456"
+}
+```
+
+### 注销账号
+
+`DELETE /api/me`
+
+后端软删 `users`，删除 identities，并撤销 API keys。
+
+---
+
+## 临时操作 token
+
+高风险接口可能需要 action token。
+
+`POST /api/me/action-tokens`
+
+```json
+{
+  "scope": "shop-write",
+  "expiresInSeconds": 900
+}
+```
+
+响应字段以服务端为准，Flutter 端只需要保存 token，并在后续请求带：
+
+```http
+X-DivePlan-Session-Token: <token>
+```
+
+如果调用业务接口收到：
+
+```json
+{
+  "error": "session_token_required",
+  "message": "Temporary session token required"
+}
+```
+
+处理策略：
+
+1. 请求 `/api/me/action-tokens`。
+2. 把返回 token 存到内存或 session storage 等短期存储。
+3. 重试原请求。
+
+---
+
+## Flutter 接入建议
+
+### Token 存储
+
+推荐使用 `flutter_secure_storage` 存：
+
+- `diveplan.jwt`
+- `diveplan.userId`
+
+内存中保留一份当前 token，所有 API request 自动加：
+
+```dart
+headers['Authorization'] = 'Bearer $token';
+```
+
+收到 `401`：
+
+1. 清本地 token。
+2. 切回未登录态。
+3. 引导用户重新登录。
+
+当前后端没有 refresh token，不能静默续期。
+
+### AuthProvider 最小实现
+
+```dart
+class EcsAuthProvider implements AuthProvider {
+  EcsAuthProvider({required this.baseUrl});
+
+  final String baseUrl;
+
+  Future<AuthResult> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/auth/login'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email, 'password': password}),
+    );
+    if (res.statusCode == 200) {
+      final j = jsonDecode(res.body) as Map<String, dynamic>;
+      return AuthResult.success(
+        AuthUser(id: j['userId'] as String, email: email),
+        j['token'] as String,
+      );
+    }
+    return AuthResult.failure(readError(res));
   }
+
+  Future<AuthResult> registerWithEmail({
+    required String email,
+    required String password,
+    required String code,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/auth/register'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email, 'password': password, 'code': code}),
+    );
+    if (res.statusCode == 200) {
+      final j = jsonDecode(res.body) as Map<String, dynamic>;
+      return AuthResult.success(
+        AuthUser(id: j['userId'] as String, email: email),
+        j['token'] as String,
+      );
+    }
+    return AuthResult.failure(readError(res));
+  }
+}
+```
+
+`sendCode` 建议单独暴露：
+
+```dart
+Future<void> sendEmailCode(String email, String purpose) async {
+  final res = await http.post(
+    Uri.parse('$baseUrl/api/auth/send-code'),
+    headers: {'Content-Type': 'application/json'},
+    body: jsonEncode({'email': email, 'purpose': purpose}),
+  );
+  if (res.statusCode < 200 || res.statusCode >= 300) {
+    throw Exception(readError(res));
+  }
+}
+```
+
+### API Client 重试 session token
+
+伪代码：
+
+```dart
+Future<http.Response> authedRequest(Future<http.Response> Function(Map<String, String> headers) send) async {
+  final headers = {
+    'Authorization': 'Bearer $jwt',
+    'Content-Type': 'application/json',
+    if (sessionToken != null) 'X-DivePlan-Session-Token': sessionToken!,
+  };
+  var res = await send(headers);
+  if (res.statusCode == 403 && res.body.contains('session_token_required')) {
+    sessionToken = await issueActionToken(scope: 'auth-session');
+    headers['X-DivePlan-Session-Token'] = sessionToken!;
+    res = await send(headers);
+  }
+  return res;
 }
 ```
 
 ---
 
-### `POST /api/auth/refresh`
-
-JWT 续期（在 30 天有效期内）。
-
-请求：`Authorization: Bearer <旧 JWT>`
-
-响应：返回新 JWT（旧的可以并存或立即失效，看后端策略）。
-
----
-
-### `POST /api/auth/logout`
-
-清除服务端 session（如果有）。Flutter 端不强依赖（删本地 token 即可）。
-
----
-
-## 错误码
+## 错误码速查
 
 | code | HTTP | 含义 |
-|---|---|---|
-| `EMAIL_EXISTS` | 400 | 邮箱已注册 |
-| `INVALID_CREDENTIALS` | 400 | 邮箱/密码错误 |
-| `ALREADY_LINKED_TO_ANOTHER` | 400 | 该三方账号已绑到其它 user |
-| `INVALID_TOKEN` | 401 | JWT 过期 / 签名无效 |
-| `INVALID_OAUTH_TOKEN` | 400 | Google / Apple token 验证失败 |
-| `RATE_LIMIT_EXCEEDED` | 429 | 频繁登录尝试 |
+|---|---:|---|
+| `unauthenticated` | 401 | 需要登录 |
+| `invalid_credentials` | 401 | 邮箱或密码错误 |
+| `invalid_or_expired_code` | 400 | 验证码错误或过期 |
+| `email_already_registered` | 409 | 邮箱已注册 |
+| `email_not_found` | 404 | 找不到邮箱 |
+| `too_frequent` | 429 | 验证码发送太频繁 |
+| `session_token_required` | 403 | 需要临时操作 token |
+| `forbidden_not_admin` | 403 | 需要管理员 |
+| `forbidden_not_super_admin` | 403 | 需要超级管理员 |
 
 ---
 
-## Flutter 端集成
+## 安全约束
 
-### 当前阶段（Mock 模式）
-
-`apps/mixer/lib/services/auth_service.dart` 默认 `MockAuthProvider`：
-
-- 启动自动匿名登录
-- 邮箱注册：本地内存账号库
-- Google / Apple 直接 Mock 成功
-- 所有数据 Hive 持久化
-
-界面已实现：
-- AppBar 账号 icon → AccountPage
-- AccountPage：当前用户 + 已绑方式 chips + 绑定/退出按钮
-- LoginPage：邮箱 / Google / Apple 三个按钮
-- RegisterPage：邮箱 + 密码 + 昵称
-
-### 后端就绪后切换
-
-`main.dart`：
-
-```dart
-import 'services/auth_service.dart';
-
-void main() async {
-  ...
-  AuthService.setProvider(EcsAuthProvider(baseUrl: 'https://api.diveplan.cn'));
-  await AuthService.ensureAnonymous();
-  ...
-}
-```
-
-然后完成 `EcsAuthProvider` 类（目前全是 `UnimplementedError`）：
-
-```dart
-@override
-Future<AuthResult> signInAnonymously({required String cdid}) async {
-  final res = await http.post(
-    Uri.parse('$baseUrl/api/auth/anonymous'),
-    headers: {'Content-Type': 'application/json'},
-    body: jsonEncode({'cdid': cdid}),
-  );
-  final j = jsonDecode(res.body);
-  if (j['ok'] == true) {
-    return AuthResult.success(
-      AuthUser.fromJson(j['data']['user']),
-      j['data']['jwt'] as String,
-    );
-  }
-  return AuthResult.failure(j['error'] as String? ?? 'unknown');
-}
-```
-
-### Google / Apple 原生 SDK 集成
-
-后端就绪后再加：
-
-```yaml
-# pubspec.yaml
-dependencies:
-  google_sign_in: ^6.2.1
-  sign_in_with_apple: ^6.1.4
-```
-
-`auth_service.dart` 的 `signInWithGoogle()` 改成调 google_sign_in 拿 idToken 再上传后端。
-
----
-
-## 安全
-
-- **密码**：bcrypt cost ≥ 10，**永不**返回密码字段
-- **JWT secret**：放 env，至少 256 位，每环境（dev/staging/prod）不同
-- **Refresh token**：JWT 过期后用 refresh 续期，refresh token 单独存（DB 一表）
-- **rate limit**：登录尝试 5 次/分钟/IP，超限锁 15 分钟
-- **CSRF**：Bearer token 走 header，不依赖 cookie，天然无 CSRF
-- **匿名升级时**：要验证 header 里的 anonymous JWT 跟入参 email 没冲突
+- 密码哈希由后端 `IPasswordHasher` 处理，客户端永不保存明文密码。
+- JWT 只存安全存储，不写普通日志。
+- 不在 crash log、analytics、debug toast 中输出 token。
+- 当前后端 JWT 没有 refresh token，401 后必须重新登录。
+- 管理员、店铺写操作、装备批量管理等接口可能需要 action token。
