@@ -1,0 +1,18 @@
+name: dive_import
+description: 潜水电脑日志导入核心库 —— 设备连接(BLE/Serial/USB/ClassicBT) + libdivecomputer 解析 + 上传。三端共用，无 UI。importer App 与 plan App 复用。
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+  flutter: '>=3.22.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  meta: ^1.15.0
+  ffi: ^2.1.0 # libdivecomputer dart:ffi 绑定（后续接入）
+  # flutter_blue_plus: ^1.32.0   # BLE 传输（接入 BLE 时取消注释）
+
+dev_dependencies:
+  flutter_lints: ^5.0.0
