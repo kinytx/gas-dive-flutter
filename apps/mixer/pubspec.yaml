@@ -16,6 +16,8 @@ dependencies:
     path: ../../packages/dive_calc
   mixer_core:
     path: ../../packages/mixer_core
+  dive_ui:
+    path: ../../packages/dive_ui
 
   # Material 风格图标
   cupertino_icons: ^1.0.8

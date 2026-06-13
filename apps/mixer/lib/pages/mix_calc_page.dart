@@ -14,10 +14,7 @@ import 'package:mixer_core/mixer_core.dart';
 import '../models/history_entry.dart';
 import '../models/weather_info.dart';
 import '../services/history_service.dart';
-import '../theme/breakpoints.dart';
-import '../theme/design_tokens.dart';
-import '../theme/mixer_colors.dart';
-import '../theme/mixer_theme.dart';
+import 'package:dive_ui/dive_ui.dart';
 import '../widgets/gas_preset_chips.dart';
 import '../widgets/hero_weather.dart';
 import '../widgets/number_field.dart';
@@ -156,30 +153,8 @@ class _MixCalcPageState extends State<MixCalcPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('混气计算'),
+        title: const Text('气体填充'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.account_circle_outlined),
-            tooltip: '账号',
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => const AccountPage(),
-            )),
-          ),
-          IconButton(
-            icon: const Icon(Icons.history),
-            tooltip: '历史记录',
-            onPressed: () => _openHistory(),
-          ),
-          IconButton(
-            icon: const Icon(Icons.science_outlined),
-            tooltip: '算法演示页',
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => HomePage(
-                currentTheme: widget.currentTheme,
-                onThemeChanged: widget.onThemeChanged,
-              ),
-            )),
-          ),
           PopupMenuButton<MixerThemeMode>(
             icon: const Icon(Icons.palette_outlined),
             tooltip: '切换主题',
@@ -1012,24 +987,35 @@ class _MixCalcPageState extends State<MixCalcPage> {
   }) =>
       Card(
         elevation: 0,
+        color: context.mixerColors.bgCard,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: BorderSide(
-              color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5)),
+          borderRadius: BorderRadius.circular(Dimens.radiusCard),
+          side: BorderSide(color: context.mixerColors.border),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(Dimens.cardPadding),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Row(children: [
-                Icon(icon, size: 18, color: accent),
+                // 小程序 section-title 左侧 accent 装饰条
+                Container(
+                  width: 3,
+                  height: 14,
+                  decoration: BoxDecoration(
+                    color: accent,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
                 const SizedBox(width: 8),
+                Icon(icon, size: 16, color: accent),
+                const SizedBox(width: 6),
                 Text(title,
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
-                      fontSize: 14,
+                      fontSize: 13,
                       color: accent,
+                      letterSpacing: 0.5,
                     )),
                 if (trailing != null) ...[
                   const Spacer(),

@@ -10,7 +10,7 @@
 import 'package:dive_calc/dive_calc.dart';
 import 'package:flutter/material.dart';
 
-import '../theme/mixer_theme.dart';
+import 'package:dive_ui/dive_ui.dart';
 
 class HomePage extends StatefulWidget {
   final MixerThemeMode currentTheme;

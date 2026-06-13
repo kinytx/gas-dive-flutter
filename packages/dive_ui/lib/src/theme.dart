@@ -6,7 +6,7 @@
 
 import 'package:flutter/material.dart';
 
-import 'mixer_colors.dart';
+import 'colors.dart';
 
 enum MixerThemeMode {
   /// 深海（夜晚潜水站）

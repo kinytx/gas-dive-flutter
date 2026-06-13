@@ -1,8 +1,11 @@
-// 气体预设 chips —— 点击一键填入 O₂% / He%
+// 气体预设 chips —— 点击一键填入 O₂% / He%。
+// pill 样式对齐小程序 picker-chip：全圆 + 选中 tint 浅底 + cyan 文字 + 实色边。
 //
 // 例子: [Air] [EAN32] [EAN36] [Tx18/45] ...
 
 import 'package:flutter/material.dart';
+
+import 'package:dive_ui/dive_ui.dart';
 
 class GasPresetChips extends StatelessWidget {
   /// (标签, o2%, he%)
@@ -23,6 +26,7 @@ class GasPresetChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.mixerColors;
     return Wrap(
       spacing: 6,
       runSpacing: 6,
@@ -31,18 +35,14 @@ class GasPresetChips extends StatelessWidget {
             (p.$3 - currentHe).abs() < 0.01;
         return InkWell(
           onTap: () => onPick(p.$2, p.$3),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(Dimens.radiusPill),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
             decoration: BoxDecoration(
-              color: selected
-                  ? Theme.of(context).colorScheme.primary
-                  : Theme.of(context).colorScheme.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(20),
+              color: selected ? c.tintCyan : c.bgInput,
+              borderRadius: BorderRadius.circular(Dimens.radiusPill),
               border: Border.all(
-                color: selected
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).colorScheme.outlineVariant,
+                color: selected ? c.borderActive : c.border,
               ),
             ),
             child: Text(
@@ -50,9 +50,7 @@ class GasPresetChips extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: selected
-                    ? Theme.of(context).colorScheme.onPrimary
-                    : Theme.of(context).colorScheme.onSurface,
+                color: selected ? c.accentCyan : c.textSecondary,
               ),
             ),
           ),

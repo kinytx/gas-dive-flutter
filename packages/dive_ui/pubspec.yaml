@@ -1,0 +1,16 @@
+name: dive_ui
+description: gas-dive-flutter 共享设计系统 —— 颜色/字号/圆角/间距 token + 4 套主题 + 响应式断点。mixer 与 plan 共用，对齐微信小程序设计语言。
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+  flutter: '>=3.22.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  meta: ^1.15.0
+
+dev_dependencies:
+  flutter_lints: ^5.0.0

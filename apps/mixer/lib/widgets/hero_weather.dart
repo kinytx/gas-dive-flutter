@@ -53,36 +53,42 @@ class _HeroWeatherState extends State<HeroWeather> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 180,
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        gradient: _gradientFor(_weather?.current.condition),
-      ),
-      child: Stack(
-        children: [
-          _backgroundDecoration(_weather?.current.condition),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: _buildContent(context),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 大屏(pad/PC)收窄 hero，少占垂直空间
+        final compact = constraints.maxWidth >= 768;
+        return Container(
+          height: compact ? 124 : 180,
+          margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: _gradientFor(_weather?.current.condition),
           ),
-          Positioned(
-            right: 8,
-            top: 8,
-            child: IconButton(
-              icon: const Icon(Icons.refresh, color: Colors.white, size: 20),
-              tooltip: '刷新',
-              onPressed: () => _load(forceRefresh: true),
-            ),
+          child: Stack(
+            children: [
+              _backgroundDecoration(_weather?.current.condition),
+              Padding(
+                padding: EdgeInsets.all(compact ? 12 : 16),
+                child: _buildContent(context, compact),
+              ),
+              Positioned(
+                right: 8,
+                top: 8,
+                child: IconButton(
+                  icon: const Icon(Icons.refresh, color: Colors.white, size: 20),
+                  tooltip: '刷新',
+                  onPressed: () => _load(forceRefresh: true),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildContent(BuildContext context) {
+  Widget _buildContent(BuildContext context, bool compact) {
     if (_loading) {
       return const Center(
         child: SizedBox(
@@ -151,7 +157,8 @@ class _HeroWeatherState extends State<HeroWeather> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Icon(_iconFor(w.current.condition), color: Colors.white, size: 48),
+            Icon(_iconFor(w.current.condition),
+                color: Colors.white, size: compact ? 36 : 48),
             const SizedBox(width: 12),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -161,11 +168,11 @@ class _HeroWeatherState extends State<HeroWeather> {
                   children: [
                     Text(
                       w.current.tempC.toStringAsFixed(0),
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white,
-                        fontSize: 42,
+                        fontSize: compact ? 30 : 42,
                         fontWeight: FontWeight.w700,
-                        fontFeatures: [FontFeature.tabularFigures()],
+                        fontFeatures: const [FontFeature.tabularFigures()],
                         height: 1.0,
                       ),
                     ),
